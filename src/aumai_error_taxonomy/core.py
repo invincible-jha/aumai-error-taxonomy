@@ -102,8 +102,8 @@ _RAW_ERRORS: Final[list[dict[str, object]]] = [
      "description": "Personally identifiable information was found in a context where it is forbidden.",
      "retryable": False, "severity": "critical"},
     # Additional entries to reach 30 total
-    {"code": 105, "category": ErrorCategory.model, "name": "model_output_parse_error",
-     "description": "The model response could not be parsed into the expected structured format.",
+    {"code": 106, "category": ErrorCategory.model, "name": "model_output_truncated",
+     "description": "The model response was truncated before a complete structured output was produced.",
      "retryable": True, "severity": "medium"},
     {"code": 405, "category": ErrorCategory.resource, "name": "disk_write_error",
      "description": "A write operation to the filesystem failed due to permission or space issues.",
@@ -161,11 +161,15 @@ def errors_by_category(category: ErrorCategory) -> list[AgentError]:
 
 
 # Mapping from Python built-in exception types to agent error codes.
+# IMPORTANT: subclasses must appear before their parent class so that
+# isinstance() matching selects the most specific handler first.
+# ConnectionRefusedError and ConnectionResetError are both subclasses of
+# ConnectionError and must therefore precede it in this list.
 _EXCEPTION_CODE_MAP: Final[list[tuple[type[BaseException], int]]] = [
     (TimeoutError, 103),
-    (ConnectionError, 404),
     (ConnectionRefusedError, 404),
     (ConnectionResetError, 404),
+    (ConnectionError, 404),
     (socket.timeout, 103),
     (urllib.error.URLError, 404),
     (PermissionError, 302),
@@ -184,8 +188,8 @@ _EXCEPTION_CODE_MAP: Final[list[tuple[type[BaseException], int]]] = [
 def classify_exception(exc: BaseException) -> AgentError:
     """Map a Python exception instance to the closest AgentError.
 
-    Falls back to error 101 (model_not_found treated as generic unknown) when
-    no mapping exists — callers should check the returned error for accuracy.
+    Falls back to error 601 (data_schema_violation as the most neutral error)
+    when no mapping exists — callers should check the returned error for accuracy.
     """
     for exc_type, code in _EXCEPTION_CODE_MAP:
         if isinstance(exc, exc_type):
